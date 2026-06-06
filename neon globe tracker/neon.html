@@ -1,0 +1,1155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Hand Tracking · Interactive Experience</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@700;800&display=swap');
+
+  :root {
+    --bg: #080b14;
+    --panel: #0d1220;
+    --accent: #00ffe5;
+    --accent2: #ff4dc4;
+    --accent3: #7b5ea7;
+    --text: #c8d8f0;
+    --dim: #3a4a6a;
+    --glow: 0 0 18px #00ffe580;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 22px;
+    background: var(--panel);
+    border-bottom: 1px solid #1a2540;
+    z-index: 10;
+    flex-shrink: 0;
+  }
+
+  header h1 {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.15rem;
+    font-weight: 800;
+    letter-spacing: 0.05em;
+    color: var(--accent);
+    text-shadow: var(--glow);
+  }
+
+  .mode-buttons {
+    display: flex;
+    gap: 8px;
+  }
+
+  .mode-btn {
+    background: #141c30;
+    border: 1px solid var(--dim);
+    color: var(--text);
+    font-family: 'Space Mono', monospace;
+    font-size: 0.68rem;
+    padding: 5px 13px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s;
+    letter-spacing: 0.04em;
+  }
+
+  .mode-btn:hover, .mode-btn.active {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 10px #00ffe530;
+    background: #0a1825;
+  }
+
+  .status-pill {
+    font-size: 0.65rem;
+    padding: 4px 12px;
+    border-radius: 20px;
+    background: #12233a;
+    border: 1px solid #1e3a5f;
+    color: #4a7a9b;
+    letter-spacing: 0.05em;
+    transition: all 0.4s;
+  }
+
+  .status-pill.ready {
+    border-color: var(--accent);
+    color: var(--accent);
+    box-shadow: 0 0 8px #00ffe540;
+  }
+
+  /* Main area */
+  .main {
+    flex: 1;
+    display: flex;
+    gap: 0;
+    overflow: hidden;
+    position: relative;
+  }
+
+  /* VIDEO FEED - left side, upper portion */
+  .video-wrap {
+    position: relative;
+    width: 340px;
+    flex-shrink: 0;
+    border-right: 1px solid #1a2540;
+    display: flex;
+    flex-direction: column;
+    background: #060a12;
+  }
+
+  .face-label {
+    font-size: 0.6rem;
+    color: var(--dim);
+    letter-spacing: 0.08em;
+    padding: 6px 10px 4px;
+    text-transform: uppercase;
+  }
+
+  #videoEl {
+    width: 100%;
+    height: auto;
+    display: block;
+    transform: scaleX(-1);
+    max-height: 260px;
+    object-fit: cover;
+    border-bottom: 1px solid #141e30;
+  }
+
+  /* Landmark overlay on video */
+  #landmarkCanvas {
+    position: absolute;
+    top: 24px;
+    left: 0;
+    width: 100%;
+    height: 260px;
+    pointer-events: none;
+    transform: scaleX(-1);
+  }
+
+  /* Info panel below video */
+  .info-panel {
+    flex: 1;
+    padding: 12px 14px;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+  }
+
+  .info-block {
+    background: #0a0f1e;
+    border: 1px solid #1a2540;
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+
+  .info-block h3 {
+    font-size: 0.6rem;
+    color: var(--dim);
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    margin-bottom: 7px;
+  }
+
+  .hand-data {
+    font-size: 0.62rem;
+    line-height: 1.9;
+    color: #7090b0;
+  }
+
+  .hand-data span { color: var(--accent); }
+
+  .gesture-badge {
+    display: inline-block;
+    font-size: 0.58rem;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: #0f1f35;
+    border: 1px solid #1e3a5f;
+    color: #5090c0;
+    margin: 2px 2px 0 0;
+    transition: all 0.3s;
+  }
+
+  .gesture-badge.active {
+    border-color: var(--accent2);
+    color: var(--accent2);
+    background: #1a0f20;
+  }
+
+  .tips {
+    font-size: 0.6rem;
+    line-height: 2;
+    color: #3a5070;
+  }
+
+  .tips b { color: var(--accent3); }
+
+  /* CANVAS - main interaction area */
+  .canvas-wrap {
+    flex: 1;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #mainCanvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: none;
+  }
+
+  /* Loading overlay */
+  #loadingOverlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(8,11,20,0.95);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 18px;
+    z-index: 50;
+    transition: opacity 0.5s;
+  }
+
+  #loadingOverlay.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .load-title {
+    font-family: 'Syne', sans-serif;
+    font-size: 1.5rem;
+    font-weight: 800;
+    color: var(--accent);
+    text-shadow: var(--glow);
+    letter-spacing: 0.08em;
+  }
+
+  .load-msg {
+    font-size: 0.7rem;
+    color: var(--dim);
+    letter-spacing: 0.06em;
+    text-align: center;
+    max-width: 300px;
+    line-height: 1.8;
+  }
+
+  .loader-bar {
+    width: 200px;
+    height: 2px;
+    background: #1a2540;
+    border-radius: 2px;
+    overflow: hidden;
+  }
+
+  .loader-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--accent), var(--accent2));
+    animation: loadfill 2s ease-in-out infinite;
+    border-radius: 2px;
+  }
+
+  @keyframes loadfill {
+    0% { width: 0%; }
+    50% { width: 70%; }
+    100% { width: 100%; }
+  }
+
+  /* Permission error */
+  #permError {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: rgba(8,11,20,0.97);
+    align-items: center;
+    justify-content: center;
+    flex-direction: column;
+    gap: 14px;
+    z-index: 60;
+    text-align: center;
+    padding: 30px;
+  }
+
+  #permError.show { display: flex; }
+
+  #permError h2 {
+    font-family: 'Syne', sans-serif;
+    color: var(--accent2);
+    font-size: 1.1rem;
+  }
+
+  #permError p {
+    font-size: 0.68rem;
+    color: var(--dim);
+    max-width: 320px;
+    line-height: 1.8;
+  }
+
+  #permError code {
+    background: #0d1220;
+    color: var(--accent);
+    padding: 3px 8px;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    border: 1px solid #1a2540;
+  }
+
+  footer {
+    padding: 6px 18px;
+    font-size: 0.56rem;
+    color: #243040;
+    border-top: 1px solid #111820;
+    display: flex;
+    gap: 20px;
+    flex-shrink: 0;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>✦ HAND CANVAS</h1>
+  <div class="mode-buttons">
+    <button class="mode-btn active" onclick="setMode('strings')" id="btn-strings">〰 Strings</button>
+    <button class="mode-btn" onclick="setMode('elastic')" id="btn-elastic">⟳ Elastic</button>
+    <button class="mode-btn" onclick="setMode('globe')" id="btn-globe">⬡ Globe</button>
+    <button class="mode-btn" onclick="setMode('paint')" id="btn-paint">✦ Paint</button>
+    <button class="mode-btn" onclick="clearScene()">✕ Clear</button>
+  </div>
+  <div class="status-pill" id="statusPill">LOADING MODEL…</div>
+</header>
+
+<div class="main">
+  <!-- Left: camera + info -->
+  <div class="video-wrap">
+    <div class="face-label">📷 Live Camera Feed</div>
+    <video id="videoEl" autoplay muted playsinline></video>
+    <canvas id="landmarkCanvas"></canvas>
+
+    <div class="info-panel">
+      <div class="info-block">
+        <h3>Hand Data</h3>
+        <div class="hand-data" id="handInfo">Waiting for hands…</div>
+      </div>
+
+      <div class="info-block">
+        <h3>Gestures Detected</h3>
+        <div id="gestureBadges">
+          <span class="gesture-badge" id="g-pinch">PINCH</span>
+          <span class="gesture-badge" id="g-fist">FIST</span>
+          <span class="gesture-badge" id="g-open">OPEN</span>
+          <span class="gesture-badge" id="g-point">POINT</span>
+          <span class="gesture-badge" id="g-peace">PEACE</span>
+        </div>
+      </div>
+
+      <div class="info-block">
+        <h3>Controls</h3>
+        <div class="tips">
+          <b>Strings:</b> Fingers pull elastic strings<br/>
+          <b>Elastic:</b> Grab &amp; stretch bands between hands<br/>
+          <b>Globe:</b> Rotate a 3D wireframe globe<br/>
+          <b>Paint:</b> Draw with fingertip trails<br/>
+          <br/>
+          <b>Pinch</b> = interact / grab<br/>
+          <b>Open hand</b> = release<br/>
+          <b>Two hands</b> = stretch elastic
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Right: main canvas -->
+  <div class="canvas-wrap">
+    <canvas id="mainCanvas"></canvas>
+
+    <div id="loadingOverlay">
+      <div class="load-title">HAND CANVAS</div>
+      <div class="load-msg">Loading MediaPipe hand tracking model.<br/>Allow camera access when prompted.</div>
+      <div class="loader-bar"><div class="loader-fill"></div></div>
+    </div>
+
+    <div id="permError">
+      <h2>Camera Access Denied</h2>
+      <p>This experience requires webcam access. Please allow camera permissions and reload.<br/><br/>
+      In VS Code with Live Server: Open in browser → address bar lock icon → allow camera.<br/><br/>
+      Or run: <code>python -m http.server 8080</code> and open <code>localhost:8080</code></p>
+    </div>
+  </div>
+</div>
+
+<footer>
+  <span>MediaPipe Hands · Google</span>
+  <span>21 landmarks · 2 hands</span>
+  <span>60fps canvas</span>
+  <span>VS Code · Live Server</span>
+</footer>
+
+<!-- MediaPipe -->
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/drawing_utils/drawing_utils.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/hands/hands.js" crossorigin="anonymous"></script>
+
+<script>
+// ───────────────────────────────────────────────
+// GLOBALS
+// ───────────────────────────────────────────────
+const videoEl = document.getElementById('videoEl');
+const mainCanvas = document.getElementById('mainCanvas');
+const ctx = mainCanvas.getContext('2d');
+const lmCanvas = document.getElementById('landmarkCanvas');
+const lmCtx = lmCanvas.getContext('2d');
+
+let currentMode = 'strings';
+let handResults = null;
+let frameCount = 0;
+
+// Finger tip indices (MediaPipe)
+const TIPS = [4, 8, 12, 16, 20];
+const KNUCKLES = [3, 7, 11, 15, 19];
+
+// ───────────────────────────────────────────────
+// RESIZE
+// ───────────────────────────────────────────────
+function resizeCanvas() {
+  const wrap = mainCanvas.parentElement;
+  mainCanvas.width = wrap.clientWidth;
+  mainCanvas.height = wrap.clientHeight;
+  lmCanvas.width = lmCanvas.offsetWidth;
+  lmCanvas.height = lmCanvas.offsetHeight;
+  initScene();
+}
+window.addEventListener('resize', resizeCanvas);
+
+// ───────────────────────────────────────────────
+// MODE SWITCH
+// ───────────────────────────────────────────────
+function setMode(m) {
+  currentMode = m;
+  document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+  document.getElementById('btn-' + m)?.classList.add('active');
+  initScene();
+}
+
+function clearScene() {
+  initScene();
+  paintTrails = [];
+}
+
+// ───────────────────────────────────────────────
+// SCENE STATE
+// ───────────────────────────────────────────────
+// STRINGS
+let stringNodes = [];
+const STRING_COUNT = 14;
+
+// ELASTIC
+let elasticBands = [];
+const BAND_COUNT = 6;
+let grabLeft = null, grabRight = null;
+
+// GLOBE
+let globeLat = 0, globeLon = 0;
+let globeSpin = 0.002;
+let globePoints = [];
+let globeGrabbed = false;
+let globePrevX = null;
+const GLOBE_R = 140;
+
+// PAINT
+let paintTrails = [];
+let lastPaintPoints = [null, null];
+
+function initScene() {
+  const W = mainCanvas.width, H = mainCanvas.height;
+
+  if (currentMode === 'strings') {
+    stringNodes = [];
+    for (let i = 0; i < STRING_COUNT; i++) {
+      const x = (i + 0.5) * (W / STRING_COUNT);
+      const segs = 22;
+      const pts = [];
+      for (let j = 0; j <= segs; j++) {
+        pts.push({ x, y: (j / segs) * H, vx: 0, vy: 0, pinned: j === 0 || j === segs });
+      }
+      const hue = (i / STRING_COUNT) * 360;
+      stringNodes.push({ pts, color: `hsl(${hue},80%,60%)` });
+    }
+  }
+
+  if (currentMode === 'elastic') {
+    elasticBands = [];
+    for (let i = 0; i < BAND_COUNT; i++) {
+      const y = H * 0.2 + (i / (BAND_COUNT - 1)) * H * 0.6;
+      elasticBands.push({
+        ax: W * 0.1, ay: y,
+        bx: W * 0.9, by: y,
+        grabbed: null,
+        color: `hsl(${i * 55 + 180},80%,65%)`
+      });
+    }
+    grabLeft = null; grabRight = null;
+  }
+
+  if (currentMode === 'globe') {
+    globePoints = [];
+    // latitude/longitude grid
+    const latLines = 14, lonLines = 20;
+    for (let lat = -90; lat <= 90; lat += 180 / latLines) {
+      const row = [];
+      for (let lon = 0; lon <= 360; lon += 360 / lonLines) {
+        const phi = (lat * Math.PI) / 180;
+        const theta = (lon * Math.PI) / 180;
+        row.push({ phi, theta });
+      }
+      globePoints.push(row);
+    }
+  }
+
+  if (currentMode === 'paint') {
+    // keep trails unless explicit clear
+    lastPaintPoints = [null, null];
+  }
+}
+
+// ───────────────────────────────────────────────
+// HAND UTILS
+// ───────────────────────────────────────────────
+function getLandmark(hand, idx) {
+  const lm = hand[idx];
+  const W = mainCanvas.width, H = mainCanvas.height;
+  // mirror x (camera is mirrored in display)
+  return { x: (1 - lm.x) * W, y: lm.y * H, z: lm.z };
+}
+
+function isPinching(hand) {
+  const thumb = getLandmark(hand, 4);
+  const index = getLandmark(hand, 8);
+  const dx = thumb.x - index.x, dy = thumb.y - index.y;
+  return Math.sqrt(dx * dx + dy * dy) < 38;
+}
+
+function isFist(hand) {
+  let folded = 0;
+  for (let i = 0; i < 4; i++) {
+    const tip = getLandmark(hand, TIPS[i + 1]);
+    const mcp = getLandmark(hand, [5, 9, 13, 17][i]);
+    if (tip.y > mcp.y) folded++;
+  }
+  return folded >= 3;
+}
+
+function isOpen(hand) {
+  let extended = 0;
+  for (let i = 0; i < 4; i++) {
+    const tip = getLandmark(hand, TIPS[i + 1]);
+    const mcp = getLandmark(hand, [5, 9, 13, 17][i]);
+    if (tip.y < mcp.y) extended++;
+  }
+  return extended >= 3;
+}
+
+function fingerTip(hand, f) { return getLandmark(hand, TIPS[f]); }
+
+// ───────────────────────────────────────────────
+// UPDATE GESTURES UI
+// ───────────────────────────────────────────────
+function updateGestureUI(hands) {
+  const active = { pinch: false, fist: false, open: false, point: false, peace: false };
+
+  if (!hands || hands.length === 0) {
+    document.getElementById('handInfo').innerHTML = 'No hands detected…';
+  } else {
+    let html = '';
+    hands.forEach((h, i) => {
+      const tip = fingerTip(h, 1);
+      html += `Hand ${i + 1}: x=<span>${Math.round(tip.x)}</span> y=<span>${Math.round(tip.y)}</span><br/>`;
+      if (isPinching(h)) active.pinch = true;
+      if (isFist(h)) active.fist = true;
+      if (isOpen(h)) active.open = true;
+    });
+    document.getElementById('handInfo').innerHTML = html;
+  }
+
+  ['pinch', 'fist', 'open', 'point', 'peace'].forEach(g => {
+    const el = document.getElementById('g-' + g);
+    if (active[g]) el.classList.add('active');
+    else el.classList.remove('active');
+  });
+}
+
+// ───────────────────────────────────────────────
+// DRAW SCENES
+// ───────────────────────────────────────────────
+
+// --- STRINGS ---
+function updateStrings(hands) {
+  const gravity = 0.25, damping = 0.88, stiffness = 0.25;
+
+  stringNodes.forEach(s => {
+    const pts = s.pts;
+    const n = pts.length;
+
+    // Physics: gravity + damping
+    for (let i = 1; i < n - 1; i++) {
+      if (pts[i].pinned) continue;
+      pts[i].vy += gravity;
+      pts[i].vx *= damping;
+      pts[i].vy *= damping;
+      pts[i].x += pts[i].vx;
+      pts[i].y += pts[i].vy;
+    }
+
+    // Constraints: spring along chain
+    for (let iter = 0; iter < 5; iter++) {
+      for (let i = 0; i < n - 1; i++) {
+        const a = pts[i], b = pts[i + 1];
+        const restLen = mainCanvas.height / (n - 1);
+        const dx = b.x - a.x, dy = b.y - a.y;
+        const dist = Math.sqrt(dx * dx + dy * dy) || 0.001;
+        const diff = (dist - restLen) / dist * stiffness;
+        if (!a.pinned) { a.x += dx * diff; a.y += dy * diff; }
+        if (!b.pinned) { b.x -= dx * diff; b.y -= dy * diff; }
+      }
+    }
+
+    // Hand interaction: push/pull points near finger tips
+    if (hands) {
+      hands.forEach(hand => {
+        TIPS.forEach((tipIdx, fi) => {
+          const fp = getLandmark(hand, tipIdx);
+          for (let i = 1; i < n - 1; i++) {
+            const dx = pts[i].x - fp.x;
+            const dy = pts[i].y - fp.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+            if (dist < 55) {
+              const force = (55 - dist) / 55;
+              pts[i].vx += (dx / dist) * force * 6;
+              pts[i].vy += (dy / dist) * force * 6;
+            }
+          }
+        });
+      });
+    }
+  });
+
+  // Draw
+  ctx.save();
+  stringNodes.forEach(s => {
+    const pts = s.pts;
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pts[0].y);
+    for (let i = 1; i < pts.length; i++) {
+      ctx.lineTo(pts[i].x, pts[i].y);
+    }
+    ctx.strokeStyle = s.color;
+    ctx.lineWidth = 1.5;
+    ctx.shadowColor = s.color;
+    ctx.shadowBlur = 8;
+    ctx.globalAlpha = 0.85;
+    ctx.stroke();
+
+    // Glow dots at tips
+    ctx.beginPath();
+    ctx.arc(pts[0].x, pts[0].y, 3, 0, Math.PI * 2);
+    ctx.fillStyle = s.color;
+    ctx.shadowBlur = 12;
+    ctx.fill();
+  });
+  ctx.restore();
+}
+
+// --- ELASTIC BANDS ---
+function updateElastic(hands) {
+  const W = mainCanvas.width, H = mainCanvas.height;
+
+  elasticBands.forEach((band, bi) => {
+    band.grabbed = null;
+    if (hands && hands.length >= 1) {
+      // Nearest finger to band midpoint
+      const mx = (band.ax + band.bx) / 2;
+      const my = (band.ay + band.by) / 2;
+
+      let closest = null, cDist = 9999, cHand = -1;
+      hands.forEach((hand, hi) => {
+        TIPS.forEach(ti => {
+          const fp = getLandmark(hand, ti);
+          const dx = fp.x - mx, dy = fp.y - my;
+          const d = Math.sqrt(dx*dx + dy*dy);
+          if (d < cDist && d < 70) { cDist = d; closest = fp; cHand = hi; }
+        });
+      });
+
+      if (closest && isPinching(hands[cHand])) {
+        band.grabbed = closest;
+      }
+    }
+
+    // Restore to rest if not grabbed
+    if (!band.grabbed) {
+      const restY = H * 0.2 + (bi / (BAND_COUNT - 1)) * H * 0.6;
+      band.ay += (restY - band.ay) * 0.08;
+      band.by += (restY - band.by) * 0.08;
+      band.ax += (W * 0.1 - band.ax) * 0.05;
+      band.bx += (W * 0.9 - band.bx) * 0.05;
+    } else {
+      // Pull midpoint toward finger
+      const mx = (band.ax + band.bx) / 2;
+      const my = (band.ay + band.by) / 2;
+      const tx = band.grabbed.x, ty = band.grabbed.y;
+      const nx = mx + (tx - mx) * 0.25;
+      const ny = my + (ty - my) * 0.25;
+      band.ax += (nx - mx) * 0.5;
+      band.bx += (nx - mx) * 0.5;
+      band.ay += (ny - my) * 0.5;
+      band.by += (ny - my) * 0.5;
+    }
+  });
+
+  // Draw bands as quadratic bezier curves
+  ctx.save();
+  elasticBands.forEach((band, bi) => {
+    const mx = (band.ax + band.bx) / 2;
+    const my = (band.ay + band.by) / 2;
+    const stretch = Math.sqrt(
+      Math.pow(band.grabbed ? (band.grabbed.x - mx) : 0, 2) +
+      Math.pow(band.grabbed ? (band.grabbed.y - my) : 0, 2)
+    );
+    const tension = Math.min(1, stretch / 120);
+    const r = Math.round(50 + tension * 200);
+    const g = Math.round(200 - tension * 150);
+    const b2 = Math.round(200 - tension * 100);
+
+    ctx.beginPath();
+    ctx.moveTo(band.ax, band.ay);
+
+    // Anchor dots
+    ctx.save();
+    ctx.fillStyle = band.color;
+    ctx.shadowColor = band.color;
+    ctx.shadowBlur = 10;
+    ctx.beginPath();
+    ctx.arc(band.ax, band.ay, 5, 0, Math.PI*2);
+    ctx.arc(band.bx, band.by, 5, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    // Band curve
+    const cpx = band.grabbed ? band.grabbed.x : mx;
+    const cpy = band.grabbed ? band.grabbed.y : my;
+
+    ctx.beginPath();
+    ctx.moveTo(band.ax, band.ay);
+    ctx.quadraticCurveTo(cpx, cpy, band.bx, band.by);
+    ctx.strokeStyle = `rgb(${r},${g},${b2})`;
+    ctx.lineWidth = band.grabbed ? 2.5 : 1.8;
+    ctx.shadowColor = `rgb(${r},${g},${b2})`;
+    ctx.shadowBlur = band.grabbed ? 20 : 10;
+    ctx.globalAlpha = 0.9;
+    ctx.stroke();
+
+    // Grab indicator
+    if (band.grabbed) {
+      ctx.beginPath();
+      ctx.arc(band.grabbed.x, band.grabbed.y, 10, 0, Math.PI * 2);
+      ctx.strokeStyle = '#00ffe5';
+      ctx.lineWidth = 1.5;
+      ctx.shadowColor = '#00ffe5';
+      ctx.shadowBlur = 15;
+      ctx.globalAlpha = 0.7;
+      ctx.stroke();
+    }
+  });
+  ctx.restore();
+}
+
+// --- GLOBE ---
+let globeRotY = 0;
+let globeVelY = 0;
+let globePrevHands = null;
+
+function updateGlobe(hands) {
+  const W = mainCanvas.width, H = mainCanvas.height;
+  const cx = W / 2, cy = H / 2;
+
+  // Rotate
+  if (hands && hands.length > 0) {
+    const hand = hands[0];
+    const indexTip = getLandmark(hand, 8);
+
+    if (globePrevHands) {
+      const prevIndex = globePrevHands[0];
+      const dx = indexTip.x - prevIndex.x;
+      globeVelY += dx * 0.012;
+    }
+    globePrevHands = [indexTip];
+  } else {
+    globePrevHands = null;
+    globeVelY *= 0.97;
+  }
+
+  globeRotY += globeVelY;
+  globeVelY *= 0.92;
+  globeRotY += 0.003; // auto spin
+
+  ctx.save();
+
+  // Globe glow bg
+  const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, GLOBE_R);
+  grd.addColorStop(0, 'rgba(0,100,180,0.08)');
+  grd.addColorStop(1, 'transparent');
+  ctx.fillStyle = grd;
+  ctx.beginPath();
+  ctx.arc(cx, cy, GLOBE_R + 10, 0, Math.PI * 2);
+  ctx.fill();
+
+  // Draw latitude lines
+  const LATS = 12, LONS = 24;
+  ctx.lineWidth = 0.7;
+  ctx.globalAlpha = 0.6;
+
+  for (let lat = -80; lat <= 80; lat += 180 / LATS) {
+    const phi = (lat * Math.PI) / 180;
+    ctx.beginPath();
+    let first = true;
+    for (let lon = 0; lon <= 360; lon += 5) {
+      const theta = (lon * Math.PI) / 180 + globeRotY;
+      const x3 = GLOBE_R * Math.cos(phi) * Math.cos(theta);
+      const y3 = GLOBE_R * Math.sin(phi);
+      const z3 = GLOBE_R * Math.cos(phi) * Math.sin(theta);
+      if (z3 > 0) {
+        const brightness = 0.3 + (z3 / GLOBE_R) * 0.7;
+        ctx.strokeStyle = `rgba(0,${Math.round(180 + brightness * 75)},${Math.round(220 + brightness * 35)},${brightness})`;
+        if (first) { ctx.moveTo(cx + x3, cy + y3); first = false; }
+        else ctx.lineTo(cx + x3, cy + y3);
+      } else {
+        if (!first) { ctx.stroke(); ctx.beginPath(); first = true; }
+      }
+    }
+    ctx.stroke();
+  }
+
+  // Longitude lines
+  for (let lon = 0; lon < 360; lon += 360 / LONS) {
+    const theta = (lon * Math.PI) / 180 + globeRotY;
+    ctx.beginPath();
+    let first = true;
+    for (let lat = -90; lat <= 90; lat += 3) {
+      const phi = (lat * Math.PI) / 180;
+      const x3 = GLOBE_R * Math.cos(phi) * Math.cos(theta);
+      const y3 = GLOBE_R * Math.sin(phi);
+      const z3 = GLOBE_R * Math.cos(phi) * Math.sin(theta);
+      if (z3 > 0) {
+        const brightness = 0.2 + (z3 / GLOBE_R) * 0.6;
+        ctx.strokeStyle = `rgba(120,80,${Math.round(200 + brightness * 55)},${brightness * 0.7})`;
+        if (first) { ctx.moveTo(cx + x3, cy + y3); first = false; }
+        else ctx.lineTo(cx + x3, cy + y3);
+      } else {
+        if (!first) { ctx.stroke(); ctx.beginPath(); first = true; }
+      }
+    }
+    ctx.stroke();
+  }
+
+  // Equator highlight
+  ctx.globalAlpha = 0.9;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  let efirst = true;
+  for (let lon = 0; lon <= 360; lon += 2) {
+    const theta = (lon * Math.PI) / 180 + globeRotY;
+    const x3 = GLOBE_R * Math.cos(theta);
+    const y3 = 0;
+    const z3 = GLOBE_R * Math.sin(theta);
+    if (z3 > 0) {
+      ctx.strokeStyle = `rgba(0,255,229,${0.3 + (z3/GLOBE_R)*0.7})`;
+      if (efirst) { ctx.moveTo(cx + x3, cy + y3); efirst = false; }
+      else ctx.lineTo(cx + x3, cy + y3);
+    } else {
+      if (!efirst) { ctx.stroke(); ctx.beginPath(); efirst = true; }
+    }
+  }
+  ctx.stroke();
+
+  // Draw dots where hands point on globe
+  if (hands && hands.length > 0) {
+    hands.forEach(hand => {
+      const tip = getLandmark(hand, 8);
+      const dx = tip.x - cx, dy = tip.y - cy;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < GLOBE_R + 30) {
+        ctx.beginPath();
+        ctx.arc(tip.x, tip.y, 6, 0, Math.PI * 2);
+        ctx.fillStyle = '#ff4dc4';
+        ctx.shadowColor = '#ff4dc4';
+        ctx.shadowBlur = 18;
+        ctx.globalAlpha = 0.9;
+        ctx.fill();
+      }
+    });
+  }
+
+  ctx.restore();
+}
+
+// --- PAINT ---
+const PAINT_COLORS = ['#00ffe5', '#ff4dc4', '#ffe500', '#00bfff', '#a0ff00', '#ff6a00'];
+const MAX_TRAIL_LEN = 60;
+
+function updatePaint(hands) {
+  if (!hands || hands.length === 0) {
+    lastPaintPoints = [null, null];
+    return;
+  }
+
+  hands.forEach((hand, hi) => {
+    if (!isOpen(hand) && !isPinching(hand)) { lastPaintPoints[hi] = null; return; }
+
+    const tip = getLandmark(hand, 8);
+    const color = PAINT_COLORS[hi % PAINT_COLORS.length];
+
+    if (lastPaintPoints[hi]) {
+      paintTrails.push({
+        x1: lastPaintPoints[hi].x, y1: lastPaintPoints[hi].y,
+        x2: tip.x, y2: tip.y,
+        color,
+        life: 1.0,
+        width: isPinching(hand) ? 3.5 : 1.5
+      });
+    }
+    lastPaintPoints[hi] = tip;
+  });
+
+  // Decay old trails
+  paintTrails.forEach(t => t.life -= 0.005);
+  paintTrails = paintTrails.filter(t => t.life > 0);
+
+  // Draw trails
+  ctx.save();
+  paintTrails.forEach(t => {
+    ctx.beginPath();
+    ctx.moveTo(t.x1, t.y1);
+    ctx.lineTo(t.x2, t.y2);
+    ctx.strokeStyle = t.color;
+    ctx.lineWidth = t.width;
+    ctx.globalAlpha = t.life * 0.9;
+    ctx.shadowColor = t.color;
+    ctx.shadowBlur = 10;
+    ctx.lineCap = 'round';
+    ctx.stroke();
+  });
+  ctx.restore();
+}
+
+// ───────────────────────────────────────────────
+// LANDMARK OVERLAY ON VIDEO
+// ───────────────────────────────────────────────
+function drawLandmarks(results) {
+  lmCtx.clearRect(0, 0, lmCanvas.width, lmCanvas.height);
+  if (!results?.multiHandLandmarks) return;
+
+  const W = lmCanvas.width, H = lmCanvas.height;
+
+  results.multiHandLandmarks.forEach((landmarks, hi) => {
+    const color = hi === 0 ? '#00ffe5' : '#ff4dc4';
+
+    // Draw connections
+    const conns = [
+      [0,1],[1,2],[2,3],[3,4],         // thumb
+      [0,5],[5,6],[6,7],[7,8],         // index
+      [0,9],[9,10],[10,11],[11,12],    // middle
+      [0,13],[13,14],[14,15],[15,16],  // ring
+      [0,17],[17,18],[18,19],[19,20],  // pinky
+      [5,9],[9,13],[13,17]             // palm
+    ];
+
+    lmCtx.save();
+    lmCtx.strokeStyle = color;
+    lmCtx.lineWidth = 1.2;
+    lmCtx.globalAlpha = 0.7;
+    lmCtx.shadowColor = color;
+    lmCtx.shadowBlur = 6;
+
+    conns.forEach(([a, b]) => {
+      const la = landmarks[a], lb = landmarks[b];
+      lmCtx.beginPath();
+      lmCtx.moveTo(la.x * W, la.y * H);
+      lmCtx.lineTo(lb.x * W, lb.y * H);
+      lmCtx.stroke();
+    });
+
+    // Dots
+    landmarks.forEach((lm, i) => {
+      const isTip = TIPS.includes(i);
+      lmCtx.beginPath();
+      lmCtx.arc(lm.x * W, lm.y * H, isTip ? 4 : 2.5, 0, Math.PI * 2);
+      lmCtx.fillStyle = isTip ? '#ffffff' : color;
+      lmCtx.shadowBlur = isTip ? 12 : 5;
+      lmCtx.globalAlpha = 0.9;
+      lmCtx.fill();
+    });
+
+    lmCtx.restore();
+  });
+}
+
+// ───────────────────────────────────────────────
+// MAIN RENDER LOOP
+// ───────────────────────────────────────────────
+function render() {
+  const W = mainCanvas.width, H = mainCanvas.height;
+  const hands = handResults?.multiHandLandmarks;
+
+  // Background
+  ctx.fillStyle = '#080b14';
+  ctx.fillRect(0, 0, W, H);
+
+  // Subtle grid
+  ctx.save();
+  ctx.strokeStyle = '#0f1520';
+  ctx.lineWidth = 1;
+  const gs = 40;
+  for (let x = 0; x < W; x += gs) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+  for (let y = 0; y < H; y += gs) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  ctx.restore();
+
+  // Scene update
+  switch (currentMode) {
+    case 'strings': updateStrings(hands); break;
+    case 'elastic': updateElastic(hands); break;
+    case 'globe':   updateGlobe(hands);   break;
+    case 'paint':   updatePaint(hands);   break;
+  }
+
+  // Draw finger trail cursors on main canvas
+  if (hands) {
+    hands.forEach((hand, hi) => {
+      const color = hi === 0 ? '#00ffe5' : '#ff4dc4';
+      TIPS.forEach(ti => {
+        const pt = getLandmark(hand, ti);
+        ctx.save();
+        ctx.beginPath();
+        ctx.arc(pt.x, pt.y, 5, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.shadowColor = color;
+        ctx.shadowBlur = 16;
+        ctx.globalAlpha = 0.8;
+        ctx.fill();
+        ctx.restore();
+      });
+
+      // Palm dot
+      const palm = getLandmark(hand, 0);
+      ctx.save();
+      ctx.beginPath();
+      ctx.arc(palm.x, palm.y, 8, 0, Math.PI * 2);
+      ctx.strokeStyle = color;
+      ctx.lineWidth = 1.5;
+      ctx.globalAlpha = 0.4;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+      ctx.stroke();
+      ctx.restore();
+    });
+  }
+
+  // HUD
+  ctx.save();
+  ctx.fillStyle = '#1a2a40';
+  ctx.globalAlpha = 0.7;
+  ctx.fillRect(12, 12, 130, 22);
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = '#00ffe5';
+  ctx.font = '600 11px Space Mono, monospace';
+  ctx.fillText('MODE: ' + currentMode.toUpperCase(), 20, 27);
+  if (hands) {
+    ctx.fillStyle = '#5090c0';
+    ctx.font = '10px Space Mono, monospace';
+    ctx.fillText(`${hands.length} hand${hands.length > 1 ? 's' : ''} detected`, 20, 50);
+  }
+  ctx.restore();
+
+  updateGestureUI(hands);
+  frameCount++;
+  requestAnimationFrame(render);
+}
+
+// ───────────────────────────────────────────────
+// MEDIAPIPE SETUP
+// ───────────────────────────────────────────────
+async function setupMediaPipe() {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { width: 640, height: 480, facingMode: 'user' }
+    });
+    videoEl.srcObject = stream;
+    await new Promise(r => videoEl.onloadedmetadata = r);
+
+    const hands = new Hands({
+      locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/hands/${f}`
+    });
+
+    hands.setOptions({
+      maxNumHands: 2,
+      modelComplexity: 1,
+      minDetectionConfidence: 0.65,
+      minTrackingConfidence: 0.55
+    });
+
+    hands.onResults(results => {
+      handResults = results;
+      drawLandmarks(results);
+    });
+
+    const camera = new Camera(videoEl, {
+      onFrame: async () => { await hands.send({ image: videoEl }); },
+      width: 640, height: 480
+    });
+
+    camera.start();
+
+    // Hide overlay
+    setTimeout(() => {
+      document.getElementById('loadingOverlay').classList.add('hidden');
+      document.getElementById('statusPill').textContent = 'TRACKING ACTIVE';
+      document.getElementById('statusPill').classList.add('ready');
+    }, 1500);
+
+  } catch (e) {
+    console.error(e);
+    if (e.name === 'NotAllowedError' || e.name === 'PermissionDeniedError') {
+      document.getElementById('permError').classList.add('show');
+      document.getElementById('loadingOverlay').classList.add('hidden');
+    }
+  }
+}
+
+// ───────────────────────────────────────────────
+// BOOT
+// ───────────────────────────────────────────────
+window.addEventListener('load', () => {
+  resizeCanvas();
+  render();
+  setupMediaPipe();
+});
+</script>
+</body>
+</html>
